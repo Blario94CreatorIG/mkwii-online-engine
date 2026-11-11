@@ -196,6 +196,7 @@ export class Menu {
             const input = el('input', {
                 type: 'url',
                 class: 'editor-url',
+                style: { width: '100%', minWidth: '0' },
                 placeholder: `Paste ${label} URL`,
                 'aria-label': `${label} URL`,
                 value: this.editorUrls[key],
@@ -236,7 +237,7 @@ export class Menu {
         };
         return el(
             'details',
-            { class: 'editor-shortcuts' },
+            { class: 'tuning editor-shortcuts' },
             el('summary', null, 'Editors'),
             el('p', null, 'Add the URLs of your existing editors once, then open them here from the pause menu.'),
             shortcut('course', 'Course Editor'),
