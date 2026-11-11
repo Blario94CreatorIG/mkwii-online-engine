@@ -241,33 +241,48 @@ export class Editors {
         const title=document.createElement('h3'); title.textContent='Model textures & materials';
         const files=this.fileInput('image/*', (file)=>this.applyTexture(file));
         const meshSelect=document.createElement('select'); meshSelect.add(new Option('All meshes','-1'));
-        this.selected?.traverse(node=>{if(node instanceof THREE.Mesh) meshSelect.add(new Option(node.name || `Mesh ${meshSelect.length}`,String(meshSelect.length-1)));});
+        this.selected?.traverse(node=>{if(node instanceof THREE.Mesh) meshSelect.add(new Option(node.name || ('Mesh '+meshSelect.length),String(meshSelect.length-1)));});
         meshSelect.onchange=()=>{this.textureTarget=Number(meshSelect.value);};
+        const channel=document.createElement('select');
+        const channels: [string, 'map'|'normalMap'|'roughnessMap'|'metalnessMap'|'emissiveMap'|'alphaMap'|'bumpMap'][]=[['Base colour','map'],['Normal','normalMap'],['Roughness','roughnessMap'],['Metalness','metalnessMap'],['Emissive','emissiveMap'],['Opacity','alphaMap'],['Bump','bumpMap']];
+        channels.forEach(([label,value])=>channel.add(new Option(label,value)));
+        channel.onchange=()=>{this.textureChannel=channel.value as typeof this.textureChannel;};
         const multiple=document.createElement('input'); multiple.type='file'; multiple.accept='image/*'; multiple.multiple=true;
-        multiple.onchange=()=>{Array.from(multiple.files??[]).forEach((file,i)=>this.applyTexture(file,i)); multiple.value='';};
-        wrap.append(title,this.field('Target mesh',meshSelect),this.field('Apply texture image',files),this.field('Assign separate images (in mesh order)',multiple));
-        const help=document.createElement('p'); help.textContent='Choose All meshes or a single mesh. Multiple images are assigned one per mesh in the order selected.'; wrap.append(help);
+        multiple.onchange=()=>{Array.from(multiple.files??[]).forEach(file=>this.applyTexture(file)); multiple.value='';};
+        wrap.append(title,this.field('Target mesh',meshSelect),this.field('Texture channel',channel),this.field('Add texture image',files),this.field('Add multiple images',multiple),this.actionButton('Fix texture filtering',()=>this.fixSelectedTextures()));
+        const help=document.createElement('p'); help.textContent='Add separate maps such as base colour, normal, roughness and metalness. Each channel stays independent.'; wrap.append(help);
         return wrap;
     }
 
-    private applyTexture(file: File, target = this.textureTarget): void {
+    private applyTexture(file: File, _target = this.textureTarget): void {
         if (!this.selected) { this.status.textContent='Select a model first.'; return; }
         const url=URL.createObjectURL(file); this.textureUrls.push(url);
         new THREE.TextureLoader().load(url,(texture)=>{
-            texture.colorSpace=THREE.SRGBColorSpace;
-            let meshIndex=0;
-            this.selected?.traverse((node)=>{
-                if (!(node instanceof THREE.Mesh)) return;
-                const apply = target < 0 || meshIndex === target;
-                meshIndex++;
-                if (!apply) return;
+            texture.colorSpace=(this.textureChannel==='map'||this.textureChannel==='emissiveMap')?THREE.SRGBColorSpace:THREE.NoColorSpace;
+            texture.wrapS=THREE.ClampToEdgeWrapping; texture.wrapT=THREE.ClampToEdgeWrapping;
+            texture.magFilter=THREE.LinearFilter; texture.minFilter=THREE.LinearMipmapLinearFilter;
+            texture.generateMipmaps=true; texture.anisotropy=this.renderer.capabilities.getMaxAnisotropy(); texture.needsUpdate=true;
+            this.appliedTextures.push(texture); let meshIndex=0;
+            this.selected?.traverse(node=>{
+                if(!(node instanceof THREE.Mesh)) return;
+                const index=meshIndex++; if(this.textureTarget>=0&&index!==this.textureTarget) return;
                 const materials=Array.isArray(node.material)?node.material:[node.material];
-                for(const material of materials){ material.map=texture; material.needsUpdate=true; }
+                for(const material of materials){(material as THREE.MeshStandardMaterial)[this.textureChannel]=texture;material.needsUpdate=true;}
             });
-            this.status.textContent=`Applied ${file.name} to selected model.`;
-        },undefined,()=>{ URL.revokeObjectURL(url); this.status.textContent=`Could not load ${file.name}.`; });
+            this.status.textContent='Added '+file.name+' as '+this.textureChannel+' texture.';
+        },undefined,()=>{URL.revokeObjectURL(url);this.status.textContent='Could not load '+file.name+'.';});
     }
 
+    private fixSelectedTextures(): void {
+        if(!this.selected){this.status.textContent='Select a model first.';return;}
+        this.selected.traverse(node=>{if(!(node instanceof THREE.Mesh))return;const materials=Array.isArray(node.material)?node.material:[node.material];for(const material of materials){for(const value of Object.values(material)){if(value instanceof THREE.Texture){value.wrapS=THREE.ClampToEdgeWrapping;value.wrapT=THREE.ClampToEdgeWrapping;value.magFilter=THREE.LinearFilter;value.minFilter=THREE.LinearMipmapLinearFilter;value.generateMipmaps=true;value.anisotropy=this.renderer.capabilities.getMaxAnisotropy();value.needsUpdate=true;}}material.needsUpdate=true;}});
+        this.status.textContent='Texture filtering and mipmaps refreshed.';
+    }
+
+    private attachTransformTarget(): void {if(this.toolMode==='camera'){this.transform.attach(this.camera);return;}if(this.selected)this.transform.attach(this.selected);else this.transform.detach();}
+    private updateToolButtons(): void {this.root.querySelectorAll<HTMLButtonElement>('.editor-tool-row button').forEach(button=>{const active=(button.textContent==='Move objects'&&this.toolMode==='object')||(button.textContent==='Move camera'&&this.toolMode==='camera')||(button.textContent==='Move'&&this.transformMode==='translate')||(button.textContent==='Rotate'&&this.transformMode==='rotate');button.classList.toggle('selected',active);});}
+    private addPositionMarker(): void {const marker=new THREE.Group();marker.name='empty-position-marker';marker.position.set(0,0.1,0);marker.add(new THREE.AxesHelper(0.8));this.courseObjects.push(marker);this.scene.add(marker);this.selected=marker;this.toolMode='object';this.attachTransformTarget();this.status.textContent='Empty position marker added. Move or rotate it without importing a model.';this.refreshPreview();}
+    private toggleSkeleton(): void {if(this.skeleton){this.scene.remove(this.skeleton);this.skeleton.dispose();this.skeleton=null;this.status.textContent='Skeleton hidden.';return;}if(!this.selected){this.status.textContent='Select a rigged model first.';return;}this.skeleton=new THREE.SkeletonHelper(this.selected);(this.skeleton.material as THREE.LineBasicMaterial).depthTest=false;this.skeleton.renderOrder=10;this.scene.add(this.skeleton);this.status.textContent='Skeleton / armature overlay shown.';}
     private animationPanel(): HTMLElement {
         const wrap=document.createElement('section'); wrap.className='editor-settings';
         const title=document.createElement('h3'); title.textContent='Character animation';
@@ -554,6 +569,8 @@ export class Editors {
         requestAnimationFrame(() => this.animate());
         const delta = Math.min(this.clock.getDelta(), 0.05);
         for (const mixer of this.mixers) mixer.update(delta);
+        this.orbit.update();
+        if(this.skeleton&&this.selected)this.skeleton.update();
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -565,6 +582,8 @@ export class Editors {
         this.disposed = true;
         this.audio.pause();
         for (const url of [...this.urls, ...this.textureUrls]) URL.revokeObjectURL(url);
+        this.appliedTextures.forEach(texture=>texture.dispose());
+        this.orbit.dispose(); this.transform.dispose();
         this.revoke(this.backgroundUrl);
         this.revoke(this.musicUrl);
         this.renderer.dispose();
