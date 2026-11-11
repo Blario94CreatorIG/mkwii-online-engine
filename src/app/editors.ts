@@ -8,11 +8,12 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 
 type EditorTab = 'course' | 'character';
 type ModelSlot = 'course' | 'character' | 'kart' | 'tires';
 
-const ACCEPTED = '.glb,.gltf,.obj,.fbx,.stl,.ply';
+const ACCEPTED = '.glb,.gltf,.obj,.fbx,.stl,.ply,.dae';
 
 export class Editors {
     private readonly root = document.createElement('section');
@@ -33,6 +34,15 @@ export class Editors {
     private musicUrl = '';
     private status!: HTMLElement;
     private disposed = false;
+    private selected: THREE.Object3D | null = null;
+    private mixers: THREE.AnimationMixer[] = [];
+    private selectedAnimations: THREE.AnimationClip[] = [];
+    private clock = new THREE.Clock();
+    private textureUrls: string[] = [];
+    private lightIntensity = 2.5;
+    private ambientIntensity = 2;
+    private keyLight!: THREE.DirectionalLight;
+    private ambientLight!: THREE.HemisphereLight;
 
     constructor(
         private readonly onClose: () => void,
@@ -48,10 +58,10 @@ export class Editors {
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
         this.renderer.setSize(800, 480);
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-        this.scene.add(new THREE.HemisphereLight(0xffffff, 0x59636c, 2));
-        const key = new THREE.DirectionalLight(0xffffff, 2.5);
-        key.position.set(5, 10, 7);
-        this.scene.add(key, this.lights);
+        this.ambientLight = new THREE.HemisphereLight(0xffffff, 0x59636c, this.ambientIntensity);
+        this.keyLight = new THREE.DirectionalLight(0xffffff, this.lightIntensity);
+        this.keyLight.position.set(5, 10, 7);
+        this.scene.add(this.ambientLight, this.keyLight, this.lights);
         const grid = new THREE.GridHelper(30, 30, 0x63717a, 0xaab4bb);
         this.scene.add(grid);
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x89979d, roughness: 1 }));
@@ -134,7 +144,7 @@ export class Editors {
         settingsTitle.textContent = 'Course atmosphere';
         courseSettings.append(settingsTitle, this.field('Course skybox image', skybox), this.field('Course music', courseMusic));
         const exportButton = this.actionButton('Export course scene', () => this.exportScene());
-        panel.append(heading, hint, actions, courseSettings, appearance, exportButton);
+        panel.append(heading, hint, actions, this.transformPanel(), this.materialPanel(), this.lightingPanel(), courseSettings, appearance, exportButton);
         return panel;
     }
 
@@ -154,8 +164,111 @@ export class Editors {
         );
         const audio = this.audioPanel();
         const appearance = this.appearancePanel();
-        panel.append(heading, hint, actions, audio, appearance, this.actionButton('Export character setup', () => this.exportCharacter()));
+        panel.append(heading, hint, actions, this.transformPanel(), this.materialPanel(), this.animationPanel(), this.lightingPanel(), audio, appearance, this.actionButton('Export character setup', () => this.exportCharacter()));
         return panel;
+    }
+
+    private transformPanel(): HTMLElement {
+        const wrap = document.createElement('section');
+        wrap.className = 'editor-settings editor-toolbox';
+        const title = document.createElement('h3'); title.textContent = 'Object transform';
+        const select = document.createElement('select'); select.setAttribute('aria-label', 'Select object to edit');
+        const refresh = () => {
+            select.replaceChildren(new Option('Select an object…', ''));
+            const objects: THREE.Object3D[] = [];
+            if (this.tab === 'course') objects.push(...this.courseObjects, ...(this.models.course ? [this.models.course] : []));
+            else for (const slot of ['character','kart','tires'] as const) if (this.models[slot]) objects.push(this.models[slot]!);
+            objects.forEach((o, i) => select.add(new Option(o.name || `Object ${i+1}`, String(i))));
+            if (this.selected && objects.includes(this.selected)) select.value = String(objects.indexOf(this.selected));
+            select.onchange = () => { this.selected = objects[Number(select.value)] ?? null; this.refreshTransformValues(wrap); };
+        };
+        const controls = document.createElement('div'); controls.className = 'editor-transform-grid';
+        const make = (label: string, axis: 'x'|'y'|'z', group: 'position'|'rotation'|'scale', value: number) => {
+            const field = document.createElement('label'); field.className = 'editor-field';
+            const caption = document.createElement('span'); caption.textContent = label;
+            const input = document.createElement('input'); input.type = 'number'; input.step = group === 'rotation' ? '5' : '0.1'; input.value = String(Number(value.toFixed(2)));
+            input.oninput = () => { if (!this.selected) return; const v = Number(input.value) || 0; if (group === 'rotation') this.selected.rotation[axis] = THREE.MathUtils.degToRad(v); else if (group === 'position') this.selected.position[axis] = v; else this.selected.scale[axis] = Math.max(0.01, v); this.refreshPreview(); };
+            field.append(caption,input); return field;
+        };
+        const populate = () => {
+            controls.replaceChildren();
+            const o = this.selected;
+            const addGroup = (name: string, group: 'position'|'rotation'|'scale', vals: number[]) => {
+                const heading = document.createElement('strong'); heading.className='editor-control-heading'; heading.textContent=name; controls.append(heading);
+                (['x','y','z'] as const).forEach((axis,i)=>controls.append(make(axis.toUpperCase(),axis,group,vals[i]!)));
+            };
+            if (!o) { controls.textContent = 'Choose a model or course piece to edit its position, rotation and dimensions.'; return; }
+            addGroup('Move', 'position', [o.position.x,o.position.y,o.position.z]);
+            addGroup('Rotate (degrees)', 'rotation', [THREE.MathUtils.radToDeg(o.rotation.x),THREE.MathUtils.radToDeg(o.rotation.y),THREE.MathUtils.radToDeg(o.rotation.z)]);
+            addGroup('Size', 'scale', [o.scale.x,o.scale.y,o.scale.z]);
+        };
+        select.onfocus = refresh;
+        wrap.append(title, this.field('Selected model / course piece', select), controls);
+        refresh(); populate();
+        const observer = new MutationObserver(() => { if (wrap.isConnected) { refresh(); if (!this.selected) populate(); } observer.disconnect(); });
+        observer.observe(wrap, {childList:true,subtree:true});
+        return wrap;
+    }
+
+    private refreshTransformValues(_wrap: HTMLElement): void {
+        this.refreshPreview();
+        this.status.textContent = this.selected ? `Editing ${this.selected.name || 'selected object'}.` : 'No object selected.';
+    }
+
+    private materialPanel(): HTMLElement {
+        const wrap = document.createElement('section'); wrap.className='editor-settings';
+        const title=document.createElement('h3'); title.textContent='Model textures & materials';
+        const files=this.fileInput('image/*', (file)=>this.applyTexture(file));
+        const multiple=document.createElement('input'); multiple.type='file'; multiple.accept='image/*'; multiple.multiple=true;
+        multiple.onchange=()=>{ for(const file of Array.from(multiple.files??[])) this.applyTexture(file); multiple.value=''; };
+        wrap.append(title,this.field('Apply texture to selected model',files),this.field('Add separate texture files (one per upload)',multiple));
+        const help=document.createElement('p'); help.textContent='Separate image files are applied as texture maps to the selected model. For precise material-by-material editing, select the mesh first in the model hierarchy.'; wrap.append(help);
+        return wrap;
+    }
+
+    private applyTexture(file: File): void {
+        if (!this.selected) { this.status.textContent='Select a model first.'; return; }
+        const url=URL.createObjectURL(file); this.textureUrls.push(url);
+        new THREE.TextureLoader().load(url,(texture)=>{
+            texture.colorSpace=THREE.SRGBColorSpace;
+            this.selected?.traverse((node)=>{
+                if (!(node instanceof THREE.Mesh)) return;
+                const materials=Array.isArray(node.material)?node.material:[node.material];
+                for(const material of materials){ material.map=texture; material.needsUpdate=true; }
+            });
+            this.status.textContent=`Applied ${file.name} to selected model.`;
+        },undefined,()=>{ URL.revokeObjectURL(url); this.status.textContent=`Could not load ${file.name}.`; });
+    }
+
+    private animationPanel(): HTMLElement {
+        const wrap=document.createElement('section'); wrap.className='editor-settings';
+        const title=document.createElement('h3'); title.textContent='Character animation';
+        const play=this.actionButton('Play animation',()=>this.playAnimation());
+        const stop=this.actionButton('Stop animation',()=>{ for(const mixer of this.mixers) mixer.stopAllAction(); this.status.textContent='Animation stopped.'; });
+        const hint=document.createElement('p'); hint.textContent='Plays animation clips embedded in the imported GLTF/GLB or DAE character file.';
+        wrap.append(title,play,stop,hint); return wrap;
+    }
+
+    private playAnimation(): void {
+        if (!this.selected) { this.status.textContent='Select the character model first.'; return; }
+        if (!this.selectedAnimations.length) { this.status.textContent='This model file contains no embedded animation clips.'; return; }
+        this.mixers.forEach(m=>m.stopAllAction()); this.mixers=[];
+        const mixer=new THREE.AnimationMixer(this.selected); this.mixers.push(mixer);
+        this.selectedAnimations.forEach(clip=>mixer.clipAction(clip).reset().play());
+        this.status.textContent=`Playing ${this.selectedAnimations.length} animation clip(s).`;
+    }
+
+    private lightingPanel(): HTMLElement {
+        const wrap=document.createElement('section'); wrap.className='editor-settings';
+        const title=document.createElement('h3'); title.textContent='Preview lighting';
+        const ambient=document.createElement('input'); ambient.type='range'; ambient.min='0'; ambient.max='5'; ambient.step='0.1'; ambient.value=String(this.ambientIntensity);
+        ambient.oninput=()=>{this.ambientIntensity=Number(ambient.value);this.ambientLight.intensity=this.ambientIntensity;};
+        const key=document.createElement('input'); key.type='range'; key.min='0'; key.max='8'; key.step='0.1'; key.value=String(this.lightIntensity);
+        key.oninput=()=>{this.lightIntensity=Number(key.value);this.keyLight.intensity=this.lightIntensity;};
+        const color=document.createElement('input'); color.type='color'; color.value='#ffffff';
+        color.oninput=()=>this.keyLight.color.set(color.value);
+        wrap.append(title,this.field('Ambient light',ambient),this.field('Directional light',key),this.field('Light colour',color));
+        return wrap;
     }
 
     private appearancePanel(): HTMLElement {
@@ -184,7 +297,9 @@ export class Editors {
         const countdown = this.fileInput('audio/*', (file) => this.onAudioFile('countdown', file));
         const fanfare = this.fileInput('audio/*', (file) => this.onAudioFile('fanfare', file));
         const texture = this.fileInput('image/*', (file) => this.onTextureFile(file));
-        wrap.append(title, this.field('Countdown sound', countdown), this.field('Countdown number texture', texture), this.field('Race-start fanfare', fanfare));
+        const texture2 = this.fileInput('image/*', (file) => this.onTextureFile(file));
+        const texture3 = this.fileInput('image/*', (file) => this.onTextureFile(file));
+        wrap.append(title, this.field('Countdown sound', countdown), this.field('Countdown texture — 3', texture), this.field('Countdown texture — 2', texture2), this.field('Countdown texture — 1', texture3), this.field('Race-start fanfare', fanfare));
         return wrap;
     }
 
@@ -261,12 +376,16 @@ export class Editors {
                 const geometry = new STLLoader().parse(buffer);
                 geometry.computeVertexNormals();
                 object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x9aa9b3, metalness: 0.2, roughness: 0.65 }));
+            } else if (ext === 'dae') {
+                const collada = new ColladaLoader().parse(new TextDecoder().decode(buffer), '');
+                object = collada.scene;
+                this.selectedAnimations = collada.animations ?? [];
             } else if (ext === 'ply') {
                 const geometry = new PLYLoader().parse(buffer);
                 geometry.computeVertexNormals();
                 object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x9aa9b3, roughness: 0.7 }));
             } else {
-                throw new Error('Unsupported model format. Use GLB, GLTF, OBJ, FBX, STL or PLY.');
+                throw new Error('Unsupported model format. Use GLB, GLTF, OBJ, FBX, DAE, STL or PLY.');
             }
             this.removeModel(slot);
             this.modelFiles[slot] = file;
@@ -285,8 +404,9 @@ export class Editors {
             } else {
                 this.models[slot] = object;
             }
+            this.selected = object;
             this.refreshPreview();
-            this.status.textContent = `Loaded ${file.name} into ${slot} slot.`;
+            this.status.textContent = `Loaded ${file.name} into ${slot} slot. Select an object below to edit it.`;
         } catch (error) {
             this.status.textContent = error instanceof Error ? error.message : 'Could not load that model file.';
         }
@@ -309,7 +429,7 @@ export class Editors {
                 const model = this.models[slot];
                 if (!model) continue;
                 const clone = model.clone(true);
-                clone.position.set(slot === 'character' ? 0 : slot === 'kart' ? 2 : -2, 0, 0);
+                if (slot === 'character') clone.position.add(new THREE.Vector3(0, 0, 0));
                 this.lights.add(clone);
             }
         } else {
@@ -404,6 +524,8 @@ export class Editors {
     private animate(): void {
         if (this.disposed) return;
         requestAnimationFrame(() => this.animate());
+        const delta = Math.min(this.clock.getDelta(), 0.05);
+        for (const mixer of this.mixers) mixer.update(delta);
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -414,7 +536,7 @@ export class Editors {
     destroy(): void {
         this.disposed = true;
         this.audio.pause();
-        for (const url of this.urls) URL.revokeObjectURL(url);
+        for (const url of [...this.urls, ...this.textureUrls]) URL.revokeObjectURL(url);
         this.revoke(this.backgroundUrl);
         this.revoke(this.musicUrl);
         this.renderer.dispose();
