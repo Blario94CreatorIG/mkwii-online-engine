@@ -36,6 +36,7 @@ export class Editors {
     constructor(
         private readonly onClose: () => void,
         private readonly onAudioFile: (kind: 'countdown' | 'fanfare', file: File) => void,
+        private readonly onTextureFile: (file: File) => void,
     ) {
         this.root.className = 'game-editors';
         this.root.hidden = true;
@@ -173,7 +174,8 @@ export class Editors {
         title.textContent = 'Race audio customisation';
         const countdown = this.fileInput('audio/*', (file) => this.onAudioFile('countdown', file));
         const fanfare = this.fileInput('audio/*', (file) => this.onAudioFile('fanfare', file));
-        wrap.append(title, this.field('Countdown sound', countdown), this.field('Race-start fanfare', fanfare));
+        const texture = this.fileInput('image/*', (file) => this.onTextureFile(file));
+        wrap.append(title, this.field('Countdown sound', countdown), this.field('Countdown number texture', texture), this.field('Race-start fanfare', fanfare));
         return wrap;
     }
 
