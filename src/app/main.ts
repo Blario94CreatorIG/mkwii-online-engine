@@ -273,7 +273,11 @@ async function main(): Promise<void> {
     };
 
     let menu: Menu;
-    const editors = new Editors(() => menu.open(), (kind, file) => audio.setCustomSound(kind, file));
+    const editors = new Editors(
+        () => menu.open(),
+        (kind, file) => audio.setCustomSound(kind, file),
+        (file) => hud.setCountdownTexture(file),
+    );
     menu = new Menu(state0, {
         onChange: applySettings,
         statsFor,
