@@ -9,6 +9,7 @@ import { formatFrames, Hud } from './hud';
 import { BUTTON_ACCELERATE, BUTTON_BRAKE, InputManager, type RawPadState, type SchemeId } from './input';
 import { DEV_TOOLS } from './devMode';
 import { effectiveTune, loadMenuState, Menu } from './menu';
+import { Editors } from './editors';
 import { Renderer, type CameraState, type CourseMeta } from './renderer';
 import { ScaleMoment } from './renderScale';
 import { Sim } from './sim';
@@ -271,9 +272,14 @@ async function main(): Promise<void> {
         input.recenterMouse();
     };
 
+    let editors: Editors;
     const menu = new Menu(state0, {
         onChange: applySettings,
         statsFor,
+        onOpenEditor: (tab) => {
+            menu.close();
+            editors.open(tab);
+        },
         onStart: async (s) => {
             audio.unlock();
             sfMusic.unlock();
@@ -293,6 +299,7 @@ async function main(): Promise<void> {
             if (s.scheme === 'mouse') void canvas.requestPointerLock();
         },
     });
+    editors = new Editors(() => menu.open());
     // The way in: the vehicle and scheme picked there, then the race.
     late.vehicle = (id) => {
         menu.set('vehicle', id);
