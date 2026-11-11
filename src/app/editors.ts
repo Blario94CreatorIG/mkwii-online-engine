@@ -386,8 +386,9 @@ export class Editors {
                 object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x9aa9b3, metalness: 0.2, roughness: 0.65 }));
             } else if (ext === 'dae') {
                 const collada = new ColladaLoader().parse(new TextDecoder().decode(buffer), '');
+                if (!collada) throw new Error('Could not parse this DAE model.');
                 object = collada.scene;
-                this.selectedAnimations = collada.animations ?? [];
+                this.selectedAnimations = [];
             } else if (ext === 'ply') {
                 const geometry = new PLYLoader().parse(buffer);
                 geometry.computeVertexNormals();
