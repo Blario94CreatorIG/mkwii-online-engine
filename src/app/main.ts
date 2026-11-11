@@ -273,7 +273,7 @@ async function main(): Promise<void> {
     };
 
     let menu: Menu;
-    const editors = new Editors(() => menu.open());
+    const editors = new Editors(() => menu.open(), (kind, file) => audio.setCustomSound(kind, file));
     menu = new Menu(state0, {
         onChange: applySettings,
         statsFor,
