@@ -108,6 +108,18 @@ export class Hud {
     private flashTimer = 0;
     private noteTimer = 0;
     private pickup: PickupKind = 'coffee';
+    private countdownTextureUrl = '';
+
+    /** Apply a user-provided countdown texture to the in-race number display. */
+    setCountdownTexture(file: File): void {
+        if (this.countdownTextureUrl) URL.revokeObjectURL(this.countdownTextureUrl);
+        this.countdownTextureUrl = URL.createObjectURL(file);
+        const node = this.q('.hud-center');
+        node.style.backgroundImage = `url('${this.countdownTextureUrl}')`;
+        node.style.backgroundRepeat = 'no-repeat';
+        node.style.backgroundPosition = 'center';
+        node.style.backgroundSize = 'contain';
+    }
 
     /** Which speed-up the item button holds (the vehicle's pickup). */
     setPickup(kind: PickupKind): void {
