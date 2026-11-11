@@ -33,7 +33,10 @@ export class Editors {
     private status!: HTMLElement;
     private disposed = false;
 
-    constructor(private readonly onClose: () => void) {
+    constructor(
+        private readonly onClose: () => void,
+        private readonly onAudioFile: (kind: 'countdown' | 'fanfare', file: File) => void,
+    ) {
         this.root.className = 'game-editors';
         this.root.hidden = true;
         this.scene.background = new THREE.Color('#b9c8d2');
@@ -168,8 +171,8 @@ export class Editors {
         wrap.className = 'editor-settings';
         const title = document.createElement('h3');
         title.textContent = 'Race audio customisation';
-        const countdown = this.fileInput('audio/*', (file) => this.storeAudio('countdown', file));
-        const fanfare = this.fileInput('audio/*', (file) => this.storeAudio('fanfare', file));
+        const countdown = this.fileInput('audio/*', (file) => this.onAudioFile('countdown', file));
+        const fanfare = this.fileInput('audio/*', (file) => this.onAudioFile('fanfare', file));
         wrap.append(title, this.field('Countdown sound', countdown), this.field('Race-start fanfare', fanfare));
         return wrap;
     }
@@ -308,13 +311,6 @@ export class Editors {
         this.audio.loop = true;
         this.audio.volume = 0.35;
         void this.audio.play().then(() => { this.status.textContent = `Playing editor music: ${file.name}`; }).catch(() => { this.status.textContent = 'Music selected. Press the music control again after interacting with the page if playback was blocked.'; });
-    }
-
-    private storeAudio(key: string, file: File): void {
-        this.status.textContent = `${file.name} selected for ${key}. Audio overrides are kept in this editor session; export your setup to keep the filenames in its manifest.`;
-        const store = (window as Window & { __kartEditorAudio?: Record<string, string> }).__kartEditorAudio ?? {};
-        store[key] = URL.createObjectURL(file);
-        (window as Window & { __kartEditorAudio?: Record<string, string> }).__kartEditorAudio = store;
     }
 
     private exportScene(): void {
