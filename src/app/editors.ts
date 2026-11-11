@@ -39,6 +39,7 @@ export class Editors {
     private selectedAnimations: THREE.AnimationClip[] = [];
     private clock = new THREE.Clock();
     private textureUrls: string[] = [];
+    private textureTarget = -1;
     private lightIntensity = 2.5;
     private ambientIntensity = 2;
     private keyLight!: THREE.DirectionalLight;
@@ -219,20 +220,27 @@ export class Editors {
         const wrap = document.createElement('section'); wrap.className='editor-settings';
         const title=document.createElement('h3'); title.textContent='Model textures & materials';
         const files=this.fileInput('image/*', (file)=>this.applyTexture(file));
+        const meshSelect=document.createElement('select'); meshSelect.add(new Option('All meshes','-1'));
+        this.selected?.traverse(node=>{if(node instanceof THREE.Mesh) meshSelect.add(new Option(node.name || `Mesh ${meshSelect.length}`,String(meshSelect.length-1)));});
+        meshSelect.onchange=()=>{this.textureTarget=Number(meshSelect.value);};
         const multiple=document.createElement('input'); multiple.type='file'; multiple.accept='image/*'; multiple.multiple=true;
-        multiple.onchange=()=>{ for(const file of Array.from(multiple.files??[])) this.applyTexture(file); multiple.value=''; };
-        wrap.append(title,this.field('Apply texture to selected model',files),this.field('Add separate texture files (one per upload)',multiple));
-        const help=document.createElement('p'); help.textContent='Separate image files are applied as texture maps to the selected model. For precise material-by-material editing, select the mesh first in the model hierarchy.'; wrap.append(help);
+        multiple.onchange=()=>{Array.from(multiple.files??[]).forEach((file,i)=>this.applyTexture(file,i)); multiple.value='';};
+        wrap.append(title,this.field('Target mesh',meshSelect),this.field('Apply texture image',files),this.field('Assign separate images (in mesh order)',multiple));
+        const help=document.createElement('p'); help.textContent='Choose All meshes or a single mesh. Multiple images are assigned one per mesh in the order selected.'; wrap.append(help);
         return wrap;
     }
 
-    private applyTexture(file: File): void {
+    private applyTexture(file: File, target = this.textureTarget): void {
         if (!this.selected) { this.status.textContent='Select a model first.'; return; }
         const url=URL.createObjectURL(file); this.textureUrls.push(url);
         new THREE.TextureLoader().load(url,(texture)=>{
             texture.colorSpace=THREE.SRGBColorSpace;
+            let meshIndex=0;
             this.selected?.traverse((node)=>{
                 if (!(node instanceof THREE.Mesh)) return;
+                const apply = target < 0 || meshIndex === target;
+                meshIndex++;
+                if (!apply) return;
                 const materials=Array.isArray(node.material)?node.material:[node.material];
                 for(const material of materials){ material.map=texture; material.needsUpdate=true; }
             });
