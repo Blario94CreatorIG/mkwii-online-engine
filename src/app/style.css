@@ -868,3 +868,11 @@ input[type='range'] {
     .editor-transform-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .editor-transform-grid .editor-control-heading { grid-column: 1 / -1; }
 }
+
+
+/* Direct-manipulation editor gizmos and texture workflow. */
+.editor-tool-row { display:flex; flex-wrap:wrap; gap:7px; width:100%; }
+.editor-tool-row button.selected { border-color:#f1bd72; background:#66543d; box-shadow:0 0 0 1px #f1bd7240 inset; }
+.editor-gizmo-hint { grid-column:1 / -1; margin:0; color:#f1d5aa; font-size:12px; }
+.editor-transform-grid .editor-control-heading { margin-top:8px; }
+.editor-settings select { max-width:min(280px, 80vw); }
