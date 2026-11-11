@@ -36,9 +36,26 @@ export interface MenuCallbacks {
     onChange(state: MenuState): void;
     /** The vehicle's race stats with `tune`. */
     statsFor(vehicle: VehicleId, tune: VehicleTune): StatSummary;
+    onOpenEditor(tab: 'course' | 'character'): void;
 }
 
 const STORAGE_KEY = 'kart.settings.v1';
+
+type EditorShortcut = 'course' | 'character';
+const EDITOR_URLS_KEY = 'kart.editor-urls.v1';
+
+function loadEditorUrls(): Record<EditorShortcut, string> {
+    try {
+        const saved = JSON.parse(localStorage.getItem(EDITOR_URLS_KEY) ?? '{}') as Partial<Record<EditorShortcut, string>>;
+        return {
+            course: typeof saved.course === 'string' ? saved.course : '',
+            character: typeof saved.character === 'string' ? saved.character : '',
+        };
+    } catch {
+        return { course: '', character: '' };
+    }
+}
+
 
 export function loadMenuState(): MenuState {
     const defaults: MenuState = {
@@ -78,6 +95,7 @@ export class Menu {
     /** Vehicle and tune of the race in progress (changing either restarts). */
     private raceVehicle: VehicleId | null = null;
     private raceTune = '';
+    private editorUrls = loadEditorUrls();
 
     constructor(
         public state: MenuState,
@@ -152,6 +170,7 @@ export class Menu {
                 row('Volume', this.range('volume', 0, 1, 0.05)),
                 row('Street detail', onOff('streetDetail')),
                 row('Ghosts', onOff('ghosts')),
+                this.editorButtons(),
                 DEV_TOOLS ? this.tuningPanel() : null,
                 el(
                     'div',
@@ -170,6 +189,16 @@ export class Menu {
                 ),
             ),
         );
+    }
+
+    /** Opens the built-in editors while keeping the race paused. */
+    private editorButtons(): HTMLElement {
+        const wrap = el('div', { class: 'editor-menu-buttons' },
+            el('strong', null, 'Create & customise'),
+            button({ class: 'pill', on: { click: () => this.cb.onOpenEditor('course') } }, 'Course Editor'),
+            button({ class: 'pill', on: { click: () => this.cb.onOpenEditor('character') } }, 'Character Editor'),
+        );
+        return wrap;
     }
 
     /** One of a few (label, selected, choose). */

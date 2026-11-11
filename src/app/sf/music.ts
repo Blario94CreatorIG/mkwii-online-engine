@@ -35,6 +35,8 @@ export class SfMusic {
     private volume = 0.6;
     /** 0: base groove, 1: + lead, 2: + lead and extra drive. */
     intensity = 0;
+    private customTrack: HTMLAudioElement | null = null;
+    private customTrackUrl = '';
 
     /** Call from a user gesture. */
     unlock(): void {
@@ -59,9 +61,26 @@ export class SfMusic {
     setVolume(v: number): void {
         this.volume = v;
         if (this.out && this.ctx) this.out.gain.setTargetAtTime(v * 0.5, this.ctx.currentTime, 0.05);
+        if (this.customTrack) this.customTrack.volume = Math.min(1, v);
+    }
+
+    /** Replace the procedural soundtrack with a player-selected course music file. */
+    setCustomTrack(file: File): void {
+        if (this.timer) clearInterval(this.timer);
+        this.playing = false;
+        if (this.customTrackUrl) URL.revokeObjectURL(this.customTrackUrl);
+        this.customTrackUrl = URL.createObjectURL(file);
+        this.customTrack = new Audio(this.customTrackUrl);
+        this.customTrack.loop = true;
+        this.customTrack.volume = Math.min(1, this.volume);
     }
 
     play(): void {
+        if (this.customTrack) {
+            this.playing = true;
+            void this.customTrack.play().catch(() => {});
+            return;
+        }
         if (!this.ctx || this.playing) return;
         this.playing = true;
         this.step = 0;
@@ -72,6 +91,12 @@ export class SfMusic {
     }
 
     stop(fade = 0.3): void {
+        if (this.customTrack) {
+            this.playing = false;
+            this.customTrack.pause();
+            this.customTrack.currentTime = 0;
+            return;
+        }
         if (!this.ctx || !this.playing) return;
         this.playing = false;
         clearInterval(this.timer);
@@ -83,11 +108,14 @@ export class SfMusic {
     }
 
     pause(): void {
-        void this.ctx?.suspend();
+        if (this.customTrack) this.customTrack.pause();
+        else void this.ctx?.suspend();
     }
 
     resume(): void {
-        if (this.playing) void this.ctx?.resume();
+        if (!this.playing) return;
+        if (this.customTrack) void this.customTrack.play().catch(() => {});
+        else void this.ctx?.resume();
     }
 
     private schedule(): void {

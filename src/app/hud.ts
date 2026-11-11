@@ -108,6 +108,15 @@ export class Hud {
     private flashTimer = 0;
     private noteTimer = 0;
     private pickup: PickupKind = 'coffee';
+    private readonly countdownTextureUrls = new Map<string, string>();
+
+    /** Store a separate image for each countdown number (1, 2, 3). */
+    setCountdownTexture(file: File, number: number): void {
+        const key = String(number);
+        const previous = this.countdownTextureUrls.get(key);
+        if (previous) URL.revokeObjectURL(previous);
+        this.countdownTextureUrls.set(key, URL.createObjectURL(file));
+    }
 
     /** Which speed-up the item button holds (the vehicle's pickup). */
     setPickup(kind: PickupKind): void {
@@ -148,6 +157,8 @@ export class Hud {
         put('.hud-mt > div', 'width', `${(ratio * 100).toFixed(1)}%`);
         q('.hud-mt').classList.toggle('charged', d.mtCharged);
         put('.hud-center', 'text', d.countdown ?? '');
+        const countdownTexture = d.countdown ? this.countdownTextureUrls.get(d.countdown) : undefined;
+        q('.hud-center').style.backgroundImage = countdownTexture ? `url('${countdownTexture}')` : '';
         q('.hud-center').classList.toggle('show', !!d.countdown);
 
         // (The engine's time-trial item stock: shown as the vehicle's speed-ups.)
