@@ -66,6 +66,8 @@ export class SfMusic {
 
     /** Replace the procedural soundtrack with a player-selected course music file. */
     setCustomTrack(file: File): void {
+        if (this.timer) clearInterval(this.timer);
+        this.playing = false;
         if (this.customTrackUrl) URL.revokeObjectURL(this.customTrackUrl);
         this.customTrackUrl = URL.createObjectURL(file);
         this.customTrack = new Audio(this.customTrackUrl);
