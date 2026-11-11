@@ -373,6 +373,7 @@ export class Editors {
         const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
         try {
             const buffer = await file.arrayBuffer();
+            this.selectedAnimations = [];
             let object: THREE.Object3D;
             if (ext === 'glb' || ext === 'gltf') {
                 object = await new Promise<THREE.Object3D>((resolve, reject) => new GLTFLoader().parse(buffer, '', (gltf) => { this.selectedAnimations = gltf.animations; resolve(gltf.scene); }, reject));
