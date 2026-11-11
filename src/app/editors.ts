@@ -37,6 +37,7 @@ export class Editors {
         private readonly onClose: () => void,
         private readonly onAudioFile: (kind: 'countdown' | 'fanfare', file: File) => void,
         private readonly onTextureFile: (file: File) => void,
+        private readonly onCourseMusicFile: (file: File) => void,
     ) {
         this.root.className = 'game-editors';
         this.root.hidden = true;
@@ -124,8 +125,15 @@ export class Editors {
         actions.className = 'editor-actions';
         actions.append(this.fileButton('Import course model', 'course'), this.actionButton('Add road', () => this.addPrimitive('road')), this.actionButton('Add ramp', () => this.addPrimitive('ramp')), this.actionButton('Add scenery box', () => this.addPrimitive('box')), this.actionButton('Clear course', () => this.clearCourse()));
         const appearance = this.appearancePanel();
+        const skybox = this.fileInput('image/*', (file) => this.setSkybox(file));
+        const courseMusic = this.fileInput('audio/*', (file) => this.onCourseMusicFile(file));
+        const courseSettings = document.createElement('div');
+        courseSettings.className = 'editor-settings';
+        const settingsTitle = document.createElement('h3');
+        settingsTitle.textContent = 'Course atmosphere';
+        courseSettings.append(settingsTitle, this.field('Course skybox image', skybox), this.field('Course music', courseMusic));
         const exportButton = this.actionButton('Export course scene', () => this.exportScene());
-        panel.append(heading, hint, actions, appearance, exportButton);
+        panel.append(heading, hint, actions, courseSettings, appearance, exportButton);
         return panel;
     }
 
@@ -304,6 +312,19 @@ export class Editors {
         } else {
             for (const object of this.courseObjects) if (!this.scene.children.includes(object)) this.scene.add(object);
         }
+    }
+
+    private setSkybox(file: File): void {
+        const url = URL.createObjectURL(file);
+        this.urls.push(url);
+        new THREE.TextureLoader().load(url, (texture) => {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            this.scene.background = texture;
+            this.status.textContent = `Course skybox preview set to ${file.name}.`;
+        }, undefined, () => {
+            this.status.textContent = 'Could not load that skybox image.';
+            URL.revokeObjectURL(url);
+        });
     }
 
     private setMusic(file: File): void {
