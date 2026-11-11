@@ -20,6 +20,7 @@ export class Editors {
     private readonly camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
     private readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     private readonly models: Record<ModelSlot, THREE.Object3D | null> = { course: null, character: null, kart: null, tires: null };
+    private readonly modelFiles: Partial<Record<ModelSlot, File>> = {};
     private readonly audio = new Audio();
     private readonly urls: string[] = [];
     private readonly lights = new THREE.Group();
@@ -268,6 +269,7 @@ export class Editors {
                 throw new Error('Unsupported model format. Use GLB, GLTF, OBJ, FBX, STL or PLY.');
             }
             this.removeModel(slot);
+            this.modelFiles[slot] = file;
             object.name = `custom-${slot}`;
             object.scale.setScalar(1);
             const bounds = new THREE.Box3().setFromObject(object);
@@ -297,6 +299,7 @@ export class Editors {
             this.disposeObject(old);
             this.models[slot] = null;
         }
+        delete this.modelFiles[slot];
     }
 
     private refreshPreview(): void {
@@ -344,10 +347,20 @@ export class Editors {
     private exportCharacter(): void {
         const manifest = {
             format: 'sf-kart-character-editor-v1',
-            slots: Object.fromEntries(Object.entries(this.models).map(([slot, model]) => [slot, model?.name ?? null])),
-            audio: (window as Window & { __kartEditorAudio?: Record<string, string> }).__kartEditorAudio ? Object.keys((window as Window & { __kartEditorAudio?: Record<string, string> }).__kartEditorAudio!) : [],
+            slots: Object.fromEntries(Object.entries(this.modelFiles).map(([slot, file]) => [slot, file?.name ?? null])),
+            note: 'Imported model files are downloaded separately beside this manifest.',
         };
+        for (const [slot, file] of Object.entries(this.modelFiles)) if (file) this.downloadFile(file.name || `${slot}-model`, file);
         this.download('character-setup.json', JSON.stringify(manifest, null, 2));
+    }
+
+    private downloadFile(name: string, file: File): void {
+        const url = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     private download(name: string, data: string): void {
