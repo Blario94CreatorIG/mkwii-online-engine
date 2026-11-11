@@ -831,3 +831,40 @@ input[type='range'] {
     .editor-panel { padding: 10px; }
     .editor-settings { align-items: stretch; flex-direction: column; }
 }
+
+
+/* Editor usability: grouped transform, texture, animation and live lighting controls. */
+.editor-toolbox { align-items: flex-start; }
+.editor-toolbox > .editor-field { min-width: min(260px, 100%); }
+.editor-transform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 8px;
+    width: 100%;
+}
+.editor-control-heading {
+    grid-column: 1 / -1;
+    margin-top: 5px;
+    color: #f3c77e;
+    font-size: 12px;
+}
+.editor-transform-grid input,
+.editor-settings select,
+.editor-settings input[type='number'] {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid #ffffff55;
+    border-radius: 7px;
+    color: #f4f6f7;
+    background: #101a22;
+    font: inherit;
+}
+.editor-settings input[type='range'] { accent-color: #e6b76f; }
+.editor-settings input[type='color'] { width: 54px; height: 34px; border: 0; background: transparent; }
+.editor-settings p { flex-basis: 100%; margin: 0; font-size: 12px; color: #d0d9de; }
+@media (max-width: 650px) {
+    .editor-transform-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .editor-transform-grid .editor-control-heading { grid-column: 1 / -1; }
+}
