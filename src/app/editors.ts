@@ -9,6 +9,8 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 
 type EditorTab = 'course' | 'character';
 type ModelSlot = 'course' | 'character' | 'kart' | 'tires';
@@ -27,6 +29,11 @@ export class Editors {
     private readonly lights = new THREE.Group();
     private readonly content = document.createElement('div');
     private readonly canvas = this.renderer.domElement;
+    private readonly orbit: OrbitControls;
+    private readonly transform: TransformControls;
+    private skeleton: THREE.SkeletonHelper | null = null;
+    private toolMode: 'object' | 'camera' = 'object';
+    private transformMode: 'translate' | 'rotate' = 'translate';
     private tab: EditorTab = 'course';
     private selectedPrimitive = 'box';
     private readonly courseObjects: THREE.Object3D[] = [];
@@ -40,6 +47,8 @@ export class Editors {
     private clock = new THREE.Clock();
     private textureUrls: string[] = [];
     private textureTarget = -1;
+    private textureChannel: 'map' | 'normalMap' | 'roughnessMap' | 'metalnessMap' | 'emissiveMap' | 'alphaMap' | 'bumpMap' = 'map';
+    private readonly appliedTextures: THREE.Texture[] = [];
     private lightIntensity = 2.5;
     private ambientIntensity = 2;
     private keyLight!: THREE.DirectionalLight;
@@ -58,6 +67,14 @@ export class Editors {
         this.camera.lookAt(0, 0, 0);
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
         this.renderer.setSize(800, 480);
+        this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+        this.orbit.enableDamping = true;
+        this.transform = new TransformControls(this.camera, this.renderer.domElement);
+        this.transform.setMode('translate');
+        this.transform.size = 0.85;
+        this.scene.add(this.transform.getHelper());
+        this.transform.addEventListener('dragging-changed', (event) => { this.orbit.enabled = !event.value; });
+        this.transform.addEventListener('objectChange', () => this.refreshPreview());
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.ambientLight = new THREE.HemisphereLight(0xffffff, 0x59636c, this.ambientIntensity);
         this.keyLight = new THREE.DirectionalLight(0xffffff, this.lightIntensity);
@@ -172,7 +189,7 @@ export class Editors {
     private transformPanel(): HTMLElement {
         const wrap = document.createElement('section');
         wrap.className = 'editor-settings editor-toolbox';
-        const title = document.createElement('h3'); title.textContent = 'Object transform';
+        const title = document.createElement('h3'); title.textContent = 'Move & rotate tools';
         const select = document.createElement('select'); select.setAttribute('aria-label', 'Select object to edit');
         const refresh = () => {
             select.replaceChildren(new Option('Select an object…', ''));
@@ -184,6 +201,8 @@ export class Editors {
             select.onchange = () => { this.selected = objects[Number(select.value)] ?? null; populate(); this.refreshTransformValues(wrap); };
         };
         const controls = document.createElement('div'); controls.className = 'editor-transform-grid';
+        const tools = document.createElement('div'); tools.className = 'editor-tool-row';
+        tools.append(this.actionButton('Move objects', () => { this.toolMode='object'; this.attachTransformTarget(); this.updateToolButtons(); }), this.actionButton('Move camera', () => { this.toolMode='camera'; this.transform.attach(this.camera); this.updateToolButtons(); this.status.textContent='Drag the camera gizmo to move the view.'; }), this.actionButton('Move', () => { this.transformMode='translate'; this.transform.setMode('translate'); this.updateToolButtons(); }), this.actionButton('Rotate', () => { this.transformMode='rotate'; this.transform.setMode('rotate'); this.updateToolButtons(); }), this.actionButton('Add empty position marker', () => this.addPositionMarker()), this.actionButton('Show skeleton / armature', () => this.toggleSkeleton()));
         const make = (label: string, axis: 'x'|'y'|'z', group: 'position'|'rotation'|'scale', value: number) => {
             const field = document.createElement('label'); field.className = 'editor-field';
             const caption = document.createElement('span'); caption.textContent = label;
@@ -204,7 +223,7 @@ export class Editors {
             addGroup('Size', 'scale', [o.scale.x,o.scale.y,o.scale.z]);
         };
         select.onfocus = refresh;
-        wrap.append(title, this.field('Selected model / course piece', select), controls);
+        wrap.append(title, tools, this.field('Selected model / course piece', select), controls);
         refresh(); populate();
         const observer = new MutationObserver(() => { if (wrap.isConnected) { refresh(); if (!this.selected) populate(); } observer.disconnect(); });
         observer.observe(wrap, {childList:true,subtree:true});
@@ -213,7 +232,8 @@ export class Editors {
 
     private refreshTransformValues(_wrap: HTMLElement): void {
         this.refreshPreview();
-        this.status.textContent = this.selected ? `Editing ${this.selected.name || 'selected object'}.` : 'No object selected.';
+        this.attachTransformTarget();
+        this.status.textContent = this.selected ? `Editing ${this.selected.name || 'selected object'}. Drag the gizmo in the preview.` : 'No object selected.';
     }
 
     private materialPanel(): HTMLElement {
