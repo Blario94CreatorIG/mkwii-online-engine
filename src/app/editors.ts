@@ -375,7 +375,7 @@ export class Editors {
             const buffer = await file.arrayBuffer();
             let object: THREE.Object3D;
             if (ext === 'glb' || ext === 'gltf') {
-                object = await new Promise<THREE.Object3D>((resolve, reject) => new GLTFLoader().parse(buffer, '', (gltf) => resolve(gltf.scene), reject));
+                object = await new Promise<THREE.Object3D>((resolve, reject) => new GLTFLoader().parse(buffer, '', (gltf) => { this.selectedAnimations = gltf.animations; resolve(gltf.scene); }, reject));
             } else if (ext === 'obj') {
                 object = new OBJLoader().parse(new TextDecoder().decode(buffer));
             } else if (ext === 'fbx') {
@@ -388,7 +388,7 @@ export class Editors {
                 const collada = new ColladaLoader().parse(new TextDecoder().decode(buffer), '');
                 if (!collada) throw new Error('Could not parse this DAE model.');
                 object = collada.scene;
-                this.selectedAnimations = [];
+                this.selectedAnimations = (collada as unknown as { animations?: THREE.AnimationClip[] }).animations ?? [];
             } else if (ext === 'ply') {
                 const geometry = new PLYLoader().parse(buffer);
                 geometry.computeVertexNormals();
@@ -437,9 +437,7 @@ export class Editors {
             for (const slot of ['character', 'kart', 'tires'] as const) {
                 const model = this.models[slot];
                 if (!model) continue;
-                const clone = model.clone(true);
-                if (slot === 'character') clone.position.add(new THREE.Vector3(0, 0, 0));
-                this.lights.add(clone);
+                this.lights.add(model);
             }
         } else {
             for (const object of this.courseObjects) if (!this.scene.children.includes(object)) this.scene.add(object);
