@@ -47,7 +47,7 @@ export class Editors {
     constructor(
         private readonly onClose: () => void,
         private readonly onAudioFile: (kind: 'countdown' | 'fanfare', file: File) => void,
-        private readonly onTextureFile: (file: File) => void,
+        private readonly onTextureFile: (file: File, index: number) => void,
         private readonly onCourseMusicFile: (file: File) => void,
     ) {
         this.root.className = 'game-editors';
@@ -180,7 +180,7 @@ export class Editors {
             else for (const slot of ['character','kart','tires'] as const) if (this.models[slot]) objects.push(this.models[slot]!);
             objects.forEach((o, i) => select.add(new Option(o.name || `Object ${i+1}`, String(i))));
             if (this.selected && objects.includes(this.selected)) select.value = String(objects.indexOf(this.selected));
-            select.onchange = () => { this.selected = objects[Number(select.value)] ?? null; this.refreshTransformValues(wrap); };
+            select.onchange = () => { this.selected = objects[Number(select.value)] ?? null; populate(); this.refreshTransformValues(wrap); };
         };
         const controls = document.createElement('div'); controls.className = 'editor-transform-grid';
         const make = (label: string, axis: 'x'|'y'|'z', group: 'position'|'rotation'|'scale', value: number) => {
@@ -296,9 +296,9 @@ export class Editors {
         title.textContent = 'Race audio customisation';
         const countdown = this.fileInput('audio/*', (file) => this.onAudioFile('countdown', file));
         const fanfare = this.fileInput('audio/*', (file) => this.onAudioFile('fanfare', file));
-        const texture = this.fileInput('image/*', (file) => this.onTextureFile(file));
-        const texture2 = this.fileInput('image/*', (file) => this.onTextureFile(file));
-        const texture3 = this.fileInput('image/*', (file) => this.onTextureFile(file));
+        const texture = this.fileInput('image/*', (file) => this.onTextureFile(file, 3));
+        const texture2 = this.fileInput('image/*', (file) => this.onTextureFile(file, 2));
+        const texture3 = this.fileInput('image/*', (file) => this.onTextureFile(file, 1));
         wrap.append(title, this.field('Countdown sound', countdown), this.field('Countdown texture — 3', texture), this.field('Countdown texture — 2', texture2), this.field('Countdown texture — 1', texture3), this.field('Race-start fanfare', fanfare));
         return wrap;
     }
