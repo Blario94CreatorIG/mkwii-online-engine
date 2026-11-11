@@ -277,6 +277,7 @@ async function main(): Promise<void> {
         () => menu.open(),
         (kind, file) => audio.setCustomSound(kind, file),
         (file) => hud.setCountdownTexture(file),
+        (file) => sfMusic.setCustomTrack(file),
     );
     menu = new Menu(state0, {
         onChange: applySettings,
