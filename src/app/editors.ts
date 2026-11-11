@@ -238,20 +238,29 @@ export class Editors {
     }
 
     private materialPanel(): HTMLElement {
-        const wrap = document.createElement('section'); wrap.className='editor-settings';
+        const wrap=document.createElement('section'); wrap.className='editor-settings';
         const title=document.createElement('h3'); title.textContent='Model textures & materials';
-        const files=this.fileInput('image/*', (file)=>this.applyTexture(file));
-        const meshSelect=document.createElement('select'); meshSelect.add(new Option('All meshes','-1'));
-        this.selected?.traverse(node=>{if(node instanceof THREE.Mesh) meshSelect.add(new Option(node.name || ('Mesh '+meshSelect.length),String(meshSelect.length-1)));});
-        meshSelect.onchange=()=>{this.textureTarget=Number(meshSelect.value);};
         const channel=document.createElement('select');
         const channels: [string, 'map'|'normalMap'|'roughnessMap'|'metalnessMap'|'emissiveMap'|'alphaMap'|'bumpMap'][]=[['Base colour','map'],['Normal','normalMap'],['Roughness','roughnessMap'],['Metalness','metalnessMap'],['Emissive','emissiveMap'],['Opacity','alphaMap'],['Bump','bumpMap']];
         channels.forEach(([label,value])=>channel.add(new Option(label,value)));
         channel.onchange=()=>{this.textureChannel=channel.value as typeof this.textureChannel;};
+        const meshOptions: [string,string][]=[['Entire model','-1']];
+        let meshIndex=0;
+        this.selected?.traverse(node=>{if(node instanceof THREE.Mesh){meshOptions.push([node.name || `Mesh ${meshIndex+1}`,String(meshIndex)]);meshIndex++;}});
+        const makePartUpload = (label: string) => {
+            const target=document.createElement('select');
+            meshOptions.forEach(([name,value])=>target.add(new Option(name,value)));
+            const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+            input.onchange=()=>{const file=input.files?.[0];if(file)this.applyTexture(file,Number(target.value));input.value='';};
+            return [this.field(label+' — model part',target),this.field(label+' — image',input)];
+        };
+        const single=this.fileInput('image/*',file=>this.applyTexture(file));
         const multiple=document.createElement('input'); multiple.type='file'; multiple.accept='image/*'; multiple.multiple=true;
-        multiple.onchange=()=>{Array.from(multiple.files??[]).forEach(file=>this.applyTexture(file)); multiple.value='';};
-        wrap.append(title,this.field('Target mesh',meshSelect),this.field('Texture channel',channel),this.field('Add texture image',files),this.field('Add multiple images',multiple),this.actionButton('Fix texture filtering',()=>this.fixSelectedTextures()));
-        const help=document.createElement('p'); help.textContent='Add separate maps such as base colour, normal, roughness and metalness. Each channel stays independent.'; wrap.append(help);
+        multiple.onchange=()=>{Array.from(multiple.files??[]).forEach((file,index)=>this.applyTexture(file,index));multiple.value='';};
+        const partOne=makePartUpload('Part texture 1');
+        const partTwo=makePartUpload('Part texture 2');
+        wrap.append(title,this.field('Texture channel',channel),this.field('Add texture to current target',single),...partOne,...partTwo,this.field('Add multiple images (one per mesh)',multiple),this.actionButton('Fix texture filtering',()=>this.fixSelectedTextures()));
+        const help=document.createElement('p'); help.textContent='Use the two part slots to choose separate meshes (for example, body and wheels) and upload a different image for each. Choose a channel to add independent maps such as base colour, normal, roughness or metalness.'; wrap.append(help);
         return wrap;
     }
 
