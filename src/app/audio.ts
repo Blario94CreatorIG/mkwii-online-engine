@@ -66,6 +66,9 @@ export class AudioEngine {
     private puttDepth!: GainNode;
     private volume = 0.6;
     private muted = false;
+    private customCountdown: HTMLAudioElement | null = null;
+    private customFanfare: HTMLAudioElement | null = null;
+    private customAudioUrls: string[] = [];
 
     /** Must be called from a user gesture (browser autoplay policy). */
     unlock(): void {
@@ -148,6 +151,25 @@ export class AudioEngine {
         this.setVolume(this.volume);
     }
 
+    /** Use a player-supplied file for the countdown or GO fanfare. */
+    setCustomSound(kind: 'countdown' | 'fanfare', file: File): void {
+        const url = URL.createObjectURL(file);
+        this.customAudioUrls.push(url);
+        const player = new Audio(url);
+        player.preload = 'auto';
+        const previous = kind === 'countdown' ? this.customCountdown : this.customFanfare;
+        previous?.pause();
+        if (kind === 'countdown') this.customCountdown = player;
+        else this.customFanfare = player;
+    }
+
+    private playCustom(player: HTMLAudioElement | null): boolean {
+        if (!player) return false;
+        player.currentTime = 0;
+        void player.play().catch(() => {});
+        return true;
+    }
+
     setEngineVoice(v: EngineVoice): void {
         this.voice = v;
         if (!this.ctx) return;
@@ -211,10 +233,10 @@ export class AudioEngine {
         if (!this.ctx || this.ctx.state !== 'running') return;
         switch (e.type) {
             case 'countdown':
-                this.beep(440, 0.16, 0.35);
+                if (!this.playCustom(this.customCountdown)) this.beep(440, 0.16, 0.35);
                 break;
             case 'go':
-                this.beep(880, 0.55, 0.4);
+                if (!this.playCustom(this.customFanfare)) this.beep(880, 0.55, 0.4);
                 break;
             case 'hop':
                 if (this.voice === 'ebike') this.bell();
