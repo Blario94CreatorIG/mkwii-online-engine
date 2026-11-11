@@ -194,7 +194,8 @@ export class Editors {
         const refresh = () => {
             select.replaceChildren(new Option('Select an object…', ''));
             const objects: THREE.Object3D[] = [];
-            if (this.tab === 'course') objects.push(...this.courseObjects, ...(this.models.course ? [this.models.course] : []));
+            objects.push(...this.courseObjects);
+            if (this.tab === 'course') { if (this.models.course) objects.push(this.models.course); }
             else for (const slot of ['character','kart','tires'] as const) if (this.models[slot]) objects.push(this.models[slot]!);
             objects.forEach((o, i) => select.add(new Option(o.name || `Object ${i+1}`, String(i))));
             if (this.selected && objects.includes(this.selected)) select.value = String(objects.indexOf(this.selected));
@@ -218,8 +219,7 @@ export class Editors {
                 (['x','y','z'] as const).forEach((axis,i)=>controls.append(make(axis.toUpperCase(),axis,group,vals[i]!)));
             };
             if (!o) { controls.textContent = 'Choose a model or course piece to edit its position, rotation and dimensions.'; return; }
-            addGroup('Move', 'position', [o.position.x,o.position.y,o.position.z]);
-            addGroup('Rotate (degrees)', 'rotation', [THREE.MathUtils.radToDeg(o.rotation.x),THREE.MathUtils.radToDeg(o.rotation.y),THREE.MathUtils.radToDeg(o.rotation.z)]);
+            const hint = document.createElement('p'); hint.className='editor-gizmo-hint'; hint.textContent='Use the coloured arrows or rotation rings directly on the 3D preview. No coordinate or angle numbers needed.'; controls.append(hint);
             addGroup('Size', 'scale', [o.scale.x,o.scale.y,o.scale.z]);
         };
         select.onfocus = refresh;
@@ -232,6 +232,7 @@ export class Editors {
 
     private refreshTransformValues(_wrap: HTMLElement): void {
         this.refreshPreview();
+        if(this.skeleton){this.scene.remove(this.skeleton);this.skeleton.dispose();this.skeleton=null;}
         this.attachTransformTarget();
         this.status.textContent = this.selected ? `Editing ${this.selected.name || 'selected object'}. Drag the gizmo in the preview.` : 'No object selected.';
     }
@@ -254,7 +255,7 @@ export class Editors {
         return wrap;
     }
 
-    private applyTexture(file: File, _target = this.textureTarget): void {
+    private applyTexture(file: File, target = this.textureTarget): void {
         if (!this.selected) { this.status.textContent='Select a model first.'; return; }
         const url=URL.createObjectURL(file); this.textureUrls.push(url);
         new THREE.TextureLoader().load(url,(texture)=>{
@@ -265,7 +266,7 @@ export class Editors {
             this.appliedTextures.push(texture); let meshIndex=0;
             this.selected?.traverse(node=>{
                 if(!(node instanceof THREE.Mesh)) return;
-                const index=meshIndex++; if(this.textureTarget>=0&&index!==this.textureTarget) return;
+                const index=meshIndex++; if(target>=0&&index!==target) return;
                 const materials=Array.isArray(node.material)?node.material:[node.material];
                 for(const material of materials){(material as THREE.MeshStandardMaterial)[this.textureChannel]=texture;material.needsUpdate=true;}
             });
