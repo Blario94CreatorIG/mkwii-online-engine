@@ -272,8 +272,9 @@ async function main(): Promise<void> {
         input.recenterMouse();
     };
 
-    let editors: Editors;
-    const menu = new Menu(state0, {
+    let menu: Menu;
+    const editors = new Editors(() => menu.open());
+    menu = new Menu(state0, {
         onChange: applySettings,
         statsFor,
         onOpenEditor: (tab) => {
@@ -299,7 +300,6 @@ async function main(): Promise<void> {
             if (s.scheme === 'mouse') void canvas.requestPointerLock();
         },
     });
-    editors = new Editors(() => menu.open());
     // The way in: the vehicle and scheme picked there, then the race.
     late.vehicle = (id) => {
         menu.set('vehicle', id);
