@@ -36,6 +36,7 @@ export interface MenuCallbacks {
     onChange(state: MenuState): void;
     /** The vehicle's race stats with `tune`. */
     statsFor(vehicle: VehicleId, tune: VehicleTune): StatSummary;
+    onOpenEditor(tab: 'course' | 'character'): void;
 }
 
 const STORAGE_KEY = 'kart.settings.v1';
@@ -169,7 +170,7 @@ export class Menu {
                 row('Volume', this.range('volume', 0, 1, 0.05)),
                 row('Street detail', onOff('streetDetail')),
                 row('Ghosts', onOff('ghosts')),
-                this.editorShortcuts(),
+                this.editorButtons(),
                 DEV_TOOLS ? this.tuningPanel() : null,
                 el(
                     'div',
@@ -190,59 +191,14 @@ export class Menu {
         );
     }
 
-    /** Links to the existing standalone editors; their URLs are configurable because they live outside this app. */
-    private editorShortcuts(): HTMLElement {
-        const shortcut = (key: EditorShortcut, label: string) => {
-            const input = el('input', {
-                type: 'url',
-                class: 'editor-url',
-                style: { width: '100%', minWidth: '0' },
-                placeholder: `Paste ${label} URL`,
-                'aria-label': `${label} URL`,
-                value: this.editorUrls[key],
-                on: {
-                    change: () => {
-                        this.editorUrls[key] = input.value.trim();
-                        localStorage.setItem(EDITOR_URLS_KEY, JSON.stringify(this.editorUrls));
-                    },
-                },
-            });
-            const launch = button({
-                class: 'pill',
-                on: {
-                    click: () => {
-                        const value = input.value.trim();
-                        let url: URL;
-                        try {
-                            url = new URL(value);
-                        } catch {
-                            input.setCustomValidity('Enter the full URL of the existing editor.');
-                            input.reportValidity();
-                            return;
-                        }
-                        if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-                            input.setCustomValidity('Editor links must use https:// or http://.');
-                            input.reportValidity();
-                            return;
-                        }
-                        input.setCustomValidity('');
-                        this.editorUrls[key] = url.toString();
-                        localStorage.setItem(EDITOR_URLS_KEY, JSON.stringify(this.editorUrls));
-                        window.open(url.toString(), '_blank', 'noopener,noreferrer');
-                    },
-                },
-            }, `Open ${label}`);
-            input.addEventListener('input', () => input.setCustomValidity(''));
-            return el('div', { class: 'setting' }, el('span', { class: 'label' }, label), input, launch);
-        };
-        return el(
-            'details',
-            { class: 'tuning editor-shortcuts' },
-            el('summary', null, 'Editors'),
-            el('p', null, 'Add the URLs of your existing editors once, then open them here from the pause menu.'),
-            shortcut('course', 'Course Editor'),
-            shortcut('character', 'Character Editor'),
+    /** Opens the built-in editors while keeping the race paused. */
+    private editorButtons(): HTMLElement {
+        const wrap = el('div', { class: 'editor-menu-buttons' },
+            el('strong', null, 'Create & customise'),
+            button({ class: 'pill', on: { click: () => this.cb.onOpenEditor('course') } }, 'Course Editor'),
+            button({ class: 'pill', on: { click: () => this.cb.onOpenEditor('character') } }, 'Character Editor'),
         );
+        return wrap;
     }
 
     /** One of a few (label, selected, choose). */
