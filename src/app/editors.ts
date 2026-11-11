@@ -571,7 +571,6 @@ export class Editors {
         const delta = Math.min(this.clock.getDelta(), 0.05);
         for (const mixer of this.mixers) mixer.update(delta);
         this.orbit.update();
-        if(this.skeleton&&this.selected)this.skeleton.update();
         this.renderer.render(this.scene, this.camera);
     }
 
