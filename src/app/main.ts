@@ -276,7 +276,7 @@ async function main(): Promise<void> {
     const editors = new Editors(
         () => menu.open(),
         (kind, file) => audio.setCustomSound(kind, file),
-        (file) => hud.setCountdownTexture(file),
+        (file, number) => hud.setCountdownTexture(file, number),
         (file) => sfMusic.setCustomTrack(file),
     );
     menu = new Menu(state0, {
