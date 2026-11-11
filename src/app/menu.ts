@@ -40,6 +40,22 @@ export interface MenuCallbacks {
 
 const STORAGE_KEY = 'kart.settings.v1';
 
+type EditorShortcut = 'course' | 'character';
+const EDITOR_URLS_KEY = 'kart.editor-urls.v1';
+
+function loadEditorUrls(): Record<EditorShortcut, string> {
+    try {
+        const saved = JSON.parse(localStorage.getItem(EDITOR_URLS_KEY) ?? '{}') as Partial<Record<EditorShortcut, string>>;
+        return {
+            course: typeof saved.course === 'string' ? saved.course : '',
+            character: typeof saved.character === 'string' ? saved.character : '',
+        };
+    } catch {
+        return { course: '', character: '' };
+    }
+}
+
+
 export function loadMenuState(): MenuState {
     const defaults: MenuState = {
         scheme: 'wasd',
@@ -78,6 +94,7 @@ export class Menu {
     /** Vehicle and tune of the race in progress (changing either restarts). */
     private raceVehicle: VehicleId | null = null;
     private raceTune = '';
+    private editorUrls = loadEditorUrls();
 
     constructor(
         public state: MenuState,
@@ -152,6 +169,7 @@ export class Menu {
                 row('Volume', this.range('volume', 0, 1, 0.05)),
                 row('Street detail', onOff('streetDetail')),
                 row('Ghosts', onOff('ghosts')),
+                this.editorShortcuts(),
                 DEV_TOOLS ? this.tuningPanel() : null,
                 el(
                     'div',
@@ -169,6 +187,60 @@ export class Menu {
                         : button({ class: 'go', on: { click: () => this.start() } }, 'Race!', kbd('Enter')),
                 ),
             ),
+        );
+    }
+
+    /** Links to the existing standalone editors; their URLs are configurable because they live outside this app. */
+    private editorShortcuts(): HTMLElement {
+        const shortcut = (key: EditorShortcut, label: string) => {
+            const input = el('input', {
+                type: 'url',
+                class: 'editor-url',
+                placeholder: `Paste ${label} URL`,
+                'aria-label': `${label} URL`,
+                value: this.editorUrls[key],
+                on: {
+                    change: () => {
+                        this.editorUrls[key] = input.value.trim();
+                        localStorage.setItem(EDITOR_URLS_KEY, JSON.stringify(this.editorUrls));
+                    },
+                },
+            });
+            const launch = button({
+                class: 'pill',
+                on: {
+                    click: () => {
+                        const value = input.value.trim();
+                        let url: URL;
+                        try {
+                            url = new URL(value);
+                        } catch {
+                            input.setCustomValidity('Enter the full URL of the existing editor.');
+                            input.reportValidity();
+                            return;
+                        }
+                        if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+                            input.setCustomValidity('Editor links must use https:// or http://.');
+                            input.reportValidity();
+                            return;
+                        }
+                        input.setCustomValidity('');
+                        this.editorUrls[key] = url.toString();
+                        localStorage.setItem(EDITOR_URLS_KEY, JSON.stringify(this.editorUrls));
+                        window.open(url.toString(), '_blank', 'noopener,noreferrer');
+                    },
+                },
+            }, `Open ${label}`);
+            input.addEventListener('input', () => input.setCustomValidity(''));
+            return el('div', { class: 'setting' }, el('span', { class: 'label' }, label), input, launch);
+        };
+        return el(
+            'details',
+            { class: 'editor-shortcuts' },
+            el('summary', null, 'Editors'),
+            el('p', null, 'Add the URLs of your existing editors once, then open them here from the pause menu.'),
+            shortcut('course', 'Course Editor'),
+            shortcut('character', 'Character Editor'),
         );
     }
 
